@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modbus RTU Inspector</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h2 class="sr-only">Modbus RTU Inspector — register scanner, frame builder, and decoder for solar inverters</h2>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <i class="ti ti-cpu" aria-hidden="true"></i>
+      <span>Modbus RTU</span>
+    </div>
+    <nav>
+      <button class="nav-item active" onclick="switchNav(this,'scanner')">
+        <i class="ti ti-scan" aria-hidden="true"></i> Scanner
+      </button>
+      <button class="nav-item" onclick="switchNav(this,'builder')">
+        <i class="ti ti-hammer" aria-hidden="true"></i> Frame Builder
+      </button>
+      <button class="nav-item" onclick="switchNav(this,'decoder')">
+        <i class="ti ti-braces" aria-hidden="true"></i> Decoder
+      </button>
+      <button class="nav-item" onclick="switchNav(this,'dashboard')">
+        <i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="badge gray" id="conn-badge">
+        <i class="ti ti-plug" aria-hidden="true"></i> Offline / Demo
+      </span>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="tab-bar">
+      <div class="tab active" id="tab-scanner">Register Scan</div>
+      <div class="tab hidden" id="tab-builder">Frame Builder</div>
+      <div class="tab hidden" id="tab-decoder">Decoder</div>
+      <div class="tab hidden" id="tab-dashboard">Dashboard</div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         PANEL: SCANNER
+    ══════════════════════════════════════════ -->
+    <section class="panel active" id="panel-scanner">
+
+      <div class="section-label">Connection</div>
+      <div class="row wrap">
+        <div class="field">
+          <label for="s-port">COM Port</label>
+          <select id="s-port">
+            <option>COM4</option><option>COM3</option><option>COM1</option>
+            <option>/dev/ttyUSB0</option><option>/dev/ttyUSB1</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="s-baud">Baud Rate</label>
+          <select id="s-baud">
+            <option>9600</option><option>19200</option><option>38400</option>
+            <option>57600</option><option>115200</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="s-slave">Slave ID</label>
+          <input type="number" id="s-slave" value="1" min="1" max="247" class="sm">
+        </div>
+        <div class="field">
+          <label for="s-fc">Function Code</label>
+          <select id="s-fc">
+            <option value="04">0x04 — Read Input</option>
+            <option value="03">0x03 — Read Holding</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="s-profile">Inverter Profile</label>
+          <select id="s-profile" onchange="onProfileChange(this.value)">
+            <option value="solax">SolaX X1 Hybrid G4</option>
+            <option value="huawei">Huawei SUN2000</option>
+            <option value="deye">Deye SUN Series</option>
+            <option value="solis">Solis S5/S6</option>
+            <option value="saj">SAJ H1/R5/HS2</option>
+            <option value="fox">Fox ESS H1/AC1/T</option>
+            <option value="generic">Generic (raw Modbus)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-label">Register Hex Range</div>
+      <div class="row wrap" style="align-items:flex-end; gap:10px">
+        <div class="field">
+          <label for="reg-start">Start</label>
+          <input type="text" id="reg-start" class="hex" value="0x0000" placeholder="0x0000" oninput="updateScanFrame()">
+        </div>
+        <div class="range-arrow" aria-hidden="true">
+          <i class="ti ti-arrow-right"></i>
+        </div>
+        <div class="field">
+          <label for="reg-end">End</label>
+          <input type="text" id="reg-end" class="hex" value="0x00FF" placeholder="0x00FF" oninput="updateScanFrame()">
+        </div>
+        <div class="field">
+          <label for="chunk-sz">Chunk Size</label>
+          <input type="number" id="chunk-sz" class="sm" value="20" min="1" max="50">
+        </div>
+        <div class="field">
+          <label for="resp-bytes">Resp Bytes</label>
+          <input type="number" id="resp-bytes" class="sm" value="10" min="1" max="256">
+        </div>
+      </div>
+
+      <div class="section-label">Quick Presets</div>
+      <div class="preset-btns">
+        <button class="preset-btn" onclick="setRange('0x0000','0x001F')">SolaX</button>
+        <button class="preset-btn" onclick="setRange('0x1000','0x202F')">Huawei</button>
+        <button class="preset-btn" onclick="setRange('0x006D','0x00BF')">Deye</button>
+        <button class="preset-btn" onclick="setRange('0x0033','0x00AB')">Solis</button>
+        <button class="preset-btn" onclick="setRange('0x0100','0x0155')">SAJ</button>
+        <button class="preset-btn" onclick="setRange('0x0000','0x001F')">Fox ESS</button>
+        <button class="preset-btn" onclick="setRange('0x0000','0x00FF')">Full 0-FF</button>
+        <button class="preset-btn" onclick="setRange('0x0000','0x01FF')">Full 0-1FF</button>
+      </div>
+
+      <div class="section-label">CRC Frame Preview</div>
+      <div class="frame-box" id="scan-frame-preview">01 04 00 00 00 14 71 C3</div>
+
+      <div class="section-label" style="margin-top:14px">Scan Controls</div>
+      <div class="row" style="align-items:center; gap:10px">
+        <button class="btn btn-green" onclick="startScan()">
+          <i class="ti ti-player-play" aria-hidden="true"></i> Run Scan
+        </button>
+        <button class="btn btn-stop" onclick="stopScan()">
+          <i class="ti ti-player-stop" aria-hidden="true"></i> Stop
+        </button>
+        <button class="btn btn-outline" onclick="clearScan()">
+          <i class="ti ti-trash" aria-hidden="true"></i> Clear
+        </button>
+        <button class="btn btn-outline" onclick="exportCSV()">
+          <i class="ti ti-download" aria-hidden="true"></i> Export CSV
+        </button>
+        <span id="scan-status" class="scan-status"></span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-bar" id="scan-progress" style="width:0%"></div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-val" id="s-total">0</div><div class="stat-lbl">Total</div></div>
+        <div class="stat-box"><div class="stat-val" id="s-sent">0</div><div class="stat-lbl">Sent</div></div>
+        <div class="stat-box"><div class="stat-val accent" id="s-resp">0</div><div class="stat-lbl">Responded</div></div>
+        <div class="stat-box"><div class="stat-val danger" id="s-noresp">0</div><div class="stat-lbl">No Resp</div></div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Address</th><th>uint16</th><th>int16</th><th>Hex</th>
+              <th>x0.1</th><th>x0.01</th><th>Name</th><th>Scaled</th>
+            </tr>
+          </thead>
+          <tbody id="scan-table">
+            <tr><td colspan="8" class="empty-row">Run a scan to see results</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-label" style="margin-top:14px">Log</div>
+      <div class="log-box" id="scan-log" aria-live="polite"></div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         PANEL: FRAME BUILDER
+    ══════════════════════════════════════════ -->
+    <section class="panel hidden" id="panel-builder">
+
+      <div class="section-label">Frame Parameters</div>
+      <div class="row wrap">
+        <div class="field">
+          <label for="fb-fc">Function Code</label>
+          <select id="fb-fc" onchange="buildFrame()">
+            <option value="03">0x03 — Read Holding</option>
+            <option value="04" selected>0x04 — Read Input</option>
+            <option value="06">0x06 — Write Single</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fb-reg">Register (hex)</label>
+          <input type="text" id="fb-reg" class="hex" value="0000" oninput="buildFrame()">
+        </div>
+        <div class="field">
+          <label for="fb-val">Count / Value</label>
+          <input type="number" id="fb-val" class="sm" value="1" min="0" max="65535" oninput="buildFrame()">
+        </div>
+        <div class="field">
+          <label for="fb-slave">Slave ID</label>
+          <input type="number" id="fb-slave" class="sm" value="1" min="1" max="247" oninput="buildFrame()">
+        </div>
+      </div>
+
+      <div class="section-label">Frame Preview</div>
+      <div class="frame-box" id="fb-preview">01 04 00 00 00 01 31 CA</div>
+      <div class="hint">8 bytes — CRC-16/Modbus computed automatically</div>
+
+      <div class="section-label" style="margin-top:16px">Reference</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Bytes</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Slave ID</td><td>1</td><td>Default 0x01</td></tr>
+            <tr><td>Function Code</td><td>1</td><td>0x03 Holding / 0x04 Input / 0x06 Write</td></tr>
+            <tr><td>Register (MSB)</td><td>1</td><td>High byte of start address</td></tr>
+            <tr><td>Register (LSB)</td><td>1</td><td>Low byte</td></tr>
+            <tr><td>Count / Value (MSB)</td><td>1</td><td>Number of registers to read, or write value high byte</td></tr>
+            <tr><td>Count / Value (LSB)</td><td>1</td><td></td></tr>
+            <tr><td>CRC-16 Low</td><td>1</td><td>Auto-computed</td></tr>
+            <tr><td>CRC-16 High</td><td>1</td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-label" style="margin-top:16px">Send (Live Serial)</div>
+      <div class="row" style="align-items:flex-end; gap:10px">
+        <div class="field">
+          <label for="fb-repeat">Repeat</label>
+          <input type="number" id="fb-repeat" class="sm" value="1" min="1" max="50">
+        </div>
+        <div class="field">
+          <label for="fb-delay">Delay (ms)</label>
+          <input type="number" id="fb-delay" class="sm" value="500" min="100">
+        </div>
+        <button class="btn btn-green">
+          <i class="ti ti-send" aria-hidden="true"></i> Send
+        </button>
+      </div>
+      <div class="log-box" id="fb-log" style="margin-top:12px">
+        <div class="log-line info">Offline / demo mode — frame preview only. Connect live serial to send.</div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         PANEL: DECODER
+    ══════════════════════════════════════════ -->
+    <section class="panel hidden" id="panel-decoder">
+
+      <div class="section-label">Input</div>
+      <textarea id="dec-input" class="hex-input"
+        placeholder="Paste raw hex bytes — e.g. 01 04 14 00 EB 00 00 00 00 00 00 60 93"></textarea>
+
+      <div class="row wrap" style="margin-top:10px">
+        <div class="field">
+          <label for="dec-reg">Start Register (hex)</label>
+          <input type="text" id="dec-reg" class="hex" placeholder="0000">
+        </div>
+        <div class="field">
+          <label for="dec-fc">Function Code</label>
+          <select id="dec-fc">
+            <option value="04">0x04 — Input</option>
+            <option value="03">0x03 — Holding</option>
+            <option value="06">0x06 — Write</option>
+          </select>
+        </div>
+        <button class="btn btn-green" style="margin-top:18px" onclick="decodeFrame()">
+          <i class="ti ti-braces" aria-hidden="true"></i> Decode
+        </button>
+        <button class="btn btn-outline" style="margin-top:18px" onclick="clearDecoder()">
+          <i class="ti ti-trash" aria-hidden="true"></i> Clear
+        </button>
+      </div>
+
+      <div class="section-label" style="margin-top:12px">Examples</div>
+      <div class="preset-btns">
+        <button class="preset-btn" onclick="loadExample('input')">Input regs</button>
+        <button class="preset-btn" onclick="loadExample('holding')">Holding regs</button>
+        <button class="preset-btn" onclick="loadExample('write')">Write ACK</button>
+      </div>
+
+      <div class="section-label" style="margin-top:12px">Result</div>
+      <div id="dec-summary" class="dec-summary hidden"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Offset</th><th>Address</th><th>uint16</th><th>int16</th><th>Hex</th><th>x0.1</th><th>x0.01</th></tr>
+          </thead>
+          <tbody id="dec-table">
+            <tr><td colspan="7" class="empty-row">Paste a response frame and click Decode</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         PANEL: DASHBOARD
+    ══════════════════════════════════════════ -->
+    <section class="panel hidden" id="panel-dashboard">
+      <div class="dash-header">
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <span class="status-pill on">Run Mode: Normal</span>
+          <span class="status-pill on">On-Grid</span>
+          <span class="status-pill on">Charging</span>
+          <span class="status-pill neutral">Inv Temp: 42 C</span>
+        </div>
+        <span class="hint">Demo data — SolaX X1 Hybrid G4</span>
+      </div>
+
+      <div class="section-label">Grid</div>
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-val">230.0 <span class="metric-unit">V</span></div><div class="metric-lbl">Voltage</div></div>
+        <div class="metric-card"><div class="metric-val">15.0 <span class="metric-unit">A</span></div><div class="metric-lbl">Current</div></div>
+        <div class="metric-card"><div class="metric-val">345 <span class="metric-unit">W</span></div><div class="metric-lbl">Power</div></div>
+        <div class="metric-card"><div class="metric-val">50.01 <span class="metric-unit">Hz</span></div><div class="metric-lbl">Frequency</div></div>
+        <div class="metric-card"><div class="metric-val">0.99</div><div class="metric-lbl">Power Factor</div></div>
+      </div>
+
+      <div class="section-label">Solar PV</div>
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-val">385.0 <span class="metric-unit">V</span></div><div class="metric-lbl">PV1 Voltage</div></div>
+        <div class="metric-card"><div class="metric-val">8.5 <span class="metric-unit">A</span></div><div class="metric-lbl">PV1 Current</div></div>
+        <div class="metric-card accent-card"><div class="metric-val">3270 <span class="metric-unit">W</span></div><div class="metric-lbl">PV1 Power</div></div>
+        <div class="metric-card"><div class="metric-val">372.0 <span class="metric-unit">V</span></div><div class="metric-lbl">PV2 Voltage</div></div>
+        <div class="metric-card"><div class="metric-val">6.0 <span class="metric-unit">A</span></div><div class="metric-lbl">PV2 Current</div></div>
+        <div class="metric-card"><div class="metric-val">2232 <span class="metric-unit">W</span></div><div class="metric-lbl">PV2 Power</div></div>
+        <div class="metric-card accent-card"><div class="metric-val">5502 <span class="metric-unit">W</span></div><div class="metric-lbl">PV Total</div></div>
+      </div>
+
+      <div class="section-label">Battery</div>
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-val">52.0 <span class="metric-unit">V</span></div><div class="metric-lbl">Voltage</div></div>
+        <div class="metric-card"><div class="metric-val">8.0 <span class="metric-unit">A</span></div><div class="metric-lbl">Current</div></div>
+        <div class="metric-card"><div class="metric-val">416 <span class="metric-unit">W</span></div><div class="metric-lbl">Power</div></div>
+        <div class="metric-card"><div class="metric-val">28 <span class="metric-unit">C</span></div><div class="metric-lbl">Temperature</div></div>
+        <div class="metric-card accent-card"><div class="metric-val">72 <span class="metric-unit">%</span></div><div class="metric-lbl">SOC</div></div>
+      </div>
+      <div class="soc-label">State of Charge — 72%</div>
+      <div class="soc-bar-wrap" role="progressbar" aria-valuenow="72" aria-valuemin="0" aria-valuemax="100">
+        <div class="soc-bar-fill" style="width:72%">72%</div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
